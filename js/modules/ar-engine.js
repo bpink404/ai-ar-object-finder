@@ -41,7 +41,7 @@ async function start() {
     try {
       const canvas = document.getElementById('camerafeed');
 
-      XR8.addCameraPipelineModule(fullWindowCanvasModule(canvas));
+      XR8.addCameraPipelineModule(fullWindowCanvasModule());
       XR8.addCameraPipelineModule(XR8.GlTextureRenderer.pipelineModule());
       XR8.addCameraPipelineModule(XR8.Threejs.pipelineModule());
       XR8.addCameraPipelineModule(XR8.XrController.pipelineModule());
@@ -138,31 +138,105 @@ export { start, stop, captureFrame, placeLabel, removeLabel, isTrackingNormal };
 
 // ---- Internals --------------------------------------------------------
 
-/** Replicates XRExtras.FullWindowCanvas — sizes the canvas buffer and CSS
- *  to fill the viewport on start and on resize/orientation change. */
-function fullWindowCanvasModule(canvas) {
-  const resize = () => {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    canvas.width = w;
-    canvas.height = h;
-    canvas.style.width = w + 'px';
-    canvas.style.height = h + 'px';
+/** Replicates XRExtras.FullWindowCanvas — computes canvas buffer size from
+ *  both the viewport and camera video dimensions so the feed fills the
+ *  screen with correct aspect-ratio cropping. Based on 8th Wall's own
+ *  open-source implementation. */
+function fullWindowCanvasModule() {
+  let canvas_ = null;
+  const vsize_ = { w: 0, h: 0 };
+  let orientation_ = 0;
+
+  const canvasStyle_ = {
+    width: '100%',
+    height: '100%',
+    margin: '0px',
+    padding: '0px',
+    border: '0px',
+    display: 'block',
+  };
+
+  const fillScreen = () => {
+    if (!canvas_) return;
+
+    const ww = window.innerWidth * devicePixelRatio;
+    const wh = window.innerHeight * devicePixelRatio;
+
+    // Wait for orientation change to settle
+    const mismatch =
+      ((orientation_ === 0 || orientation_ === 180) && ww > wh) ||
+      ((orientation_ === 90 || orientation_ === -90) && wh > ww);
+    if (mismatch) {
+      window.requestAnimationFrame(fillScreen);
+      return;
+    }
+
+    // Portrait-oriented window dimensions
+    const ph = Math.max(ww, wh);
+    const pw = Math.min(ww, wh);
+    const pa = ph / pw;
+
+    // Portrait-oriented video dimensions
+    const pvh = Math.max(vsize_.w, vsize_.h);
+    const pvw = Math.min(vsize_.w, vsize_.h);
+
+    // Compute crop to fill screen (cover mode)
+    let cw = Math.round(pvh / pa);
+    let ch = pvh;
+    if (cw > pvw) {
+      cw = pvw;
+      ch = Math.round(pvw * pa);
+    }
+
+    // Cap to screen resolution
+    if (cw > pw || ch > ph) { cw = pw; ch = ph; }
+
+    // Flip back to landscape if needed
+    if (ww > wh) { const t = cw; cw = ch; ch = t; }
+
+    Object.assign(canvas_.style, canvasStyle_);
+    canvas_.width = cw;
+    canvas_.height = ch;
+  };
+
+  const updateVideo = ({ videoWidth, videoHeight }) => {
+    vsize_.w = videoWidth;
+    vsize_.h = videoHeight;
   };
 
   return {
-    name: 'full-window-canvas',
-    onBeforeRun: () => { resize(); },
-    onAttach: () => {
-      window.addEventListener('resize', resize);
-      window.addEventListener('orientationchange', resize);
+    name: 'fullwindowcanvas',
+    onAttach: ({ canvas, orientation, videoWidth, videoHeight }) => {
+      canvas_ = canvas;
+      orientation_ = orientation || 0;
+      Object.assign(canvas_.style, canvasStyle_);
+      updateVideo({ videoWidth: videoWidth || 0, videoHeight: videoHeight || 0 });
+      window.addEventListener('resize', fillScreen);
+      fillScreen();
     },
     onDetach: () => {
-      window.removeEventListener('resize', resize);
-      window.removeEventListener('orientationchange', resize);
+      window.removeEventListener('resize', fillScreen);
+      canvas_ = null;
     },
-    onDeviceOrientationChangeEvent: () => { resize(); },
-    onCanvasSizeChange: () => { resize(); },
+    onCameraStatusChange: ({ status, video }) => {
+      if (status === 'hasVideo' && video) updateVideo(video);
+    },
+    onVideoSizeChange: ({ videoWidth, videoHeight }) => {
+      updateVideo({ videoWidth, videoHeight });
+      fillScreen();
+    },
+    onDeviceOrientationChange: ({ orientation }) => {
+      orientation_ = orientation;
+      fillScreen();
+    },
+    onCanvasSizeChange: () => { fillScreen(); },
+    onUpdate: () => {
+      if (!canvas_) return;
+      if (canvas_.style.width !== canvasStyle_.width ||
+          canvas_.style.height !== canvasStyle_.height) {
+        fillScreen();
+      }
+    },
   };
 }
 

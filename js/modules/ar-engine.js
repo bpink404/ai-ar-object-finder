@@ -71,6 +71,7 @@ function waitForThree(timeoutMs) {
 
 /** Stop the AR session and clean up. */
 function stop() {
+  window.removeEventListener('resize', handleResize);
   removeLabel();
   try { XR8.stop(); } catch (_) { /* may already be stopped */ }
   try { XR8.clearCameraPipelineModules(); } catch (_) { /* ok */ }
@@ -148,14 +149,23 @@ function lifecycleModule(onReady) {
       camera = xrScene.camera;
       renderer = xrScene.renderer;
 
+      // Force renderer + canvas to fill the viewport
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      renderer.setSize(w, h);
+      const cvs = renderer.domElement;
+      cvs.style.width = w + 'px';
+      cvs.style.height = h + 'px';
+
       raycaster = new THREE.Raycaster();
 
-      // Invisible ground plane for raycasting (large, flat at y=0)
       const geo = new THREE.PlaneGeometry(100, 100);
       geo.rotateX(-Math.PI / 2);
       const mat = new THREE.MeshBasicMaterial({ visible: false });
       groundPlane = new THREE.Mesh(geo, mat);
       scene.add(groundPlane);
+
+      window.addEventListener('resize', handleResize);
     },
     onUpdate: ({ processCpuResult }) => {
       if (processCpuResult && processCpuResult.reality) {
@@ -232,6 +242,15 @@ function createBubbleSprite(text) {
   });
 
   return new THREE.Sprite(material);
+}
+
+function handleResize() {
+  if (!renderer || !camera) return;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
 }
 
 function roundRect(ctx, x, y, w, h, r) {

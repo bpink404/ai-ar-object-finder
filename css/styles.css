@@ -159,9 +159,13 @@ html, body {
 
 #camerafeed {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  top: 0;
+  left: 0;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  object-fit: cover;
 }
 
 /* ---- AR overlay ---- */

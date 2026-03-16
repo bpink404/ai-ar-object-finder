@@ -41,9 +41,10 @@ async function start() {
     try {
       const canvas = document.getElementById('camerafeed');
 
+      XR8.addCameraPipelineModule(fullWindowCanvasModule(canvas));
       XR8.addCameraPipelineModule(XR8.GlTextureRenderer.pipelineModule());
-      XR8.addCameraPipelineModule(XR8.XrController.pipelineModule());
       XR8.addCameraPipelineModule(XR8.Threejs.pipelineModule());
+      XR8.addCameraPipelineModule(XR8.XrController.pipelineModule());
       XR8.addCameraPipelineModule(XR8.CanvasScreenshot.pipelineModule());
       XR8.addCameraPipelineModule(lifecycleModule(resolve));
 
@@ -71,7 +72,6 @@ function waitForThree(timeoutMs) {
 
 /** Stop the AR session and clean up. */
 function stop() {
-  window.removeEventListener('resize', handleResize);
   removeLabel();
   try { XR8.stop(); } catch (_) { /* may already be stopped */ }
   try { XR8.clearCameraPipelineModules(); } catch (_) { /* ok */ }
@@ -138,6 +138,38 @@ export { start, stop, captureFrame, placeLabel, removeLabel, isTrackingNormal };
 
 // ---- Internals --------------------------------------------------------
 
+/** Replicates XRExtras.FullWindowCanvas — sizes the canvas buffer and CSS
+ *  to fill the viewport on start and on resize/orientation change. */
+function fullWindowCanvasModule(canvas) {
+  const resize = () => {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    canvas.style.position = 'absolute';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
+  };
+
+  return {
+    name: 'full-window-canvas',
+    onBeforeRun: () => { resize(); },
+    onAttach: () => {
+      window.addEventListener('resize', resize);
+      window.addEventListener('orientationchange', resize);
+    },
+    onDetach: () => {
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('orientationchange', resize);
+    },
+    onDeviceOrientationChangeEvent: () => { resize(); },
+    onCanvasSizeChange: () => { resize(); },
+  };
+}
+
 /** Custom pipeline module that wires up Three.js references and tracking. */
 function lifecycleModule(onReady) {
   let resolved = false;
@@ -149,14 +181,6 @@ function lifecycleModule(onReady) {
       camera = xrScene.camera;
       renderer = xrScene.renderer;
 
-      // Force renderer + canvas to fill the viewport
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      renderer.setSize(w, h);
-      const cvs = renderer.domElement;
-      cvs.style.width = w + 'px';
-      cvs.style.height = h + 'px';
-
       raycaster = new THREE.Raycaster();
 
       const geo = new THREE.PlaneGeometry(100, 100);
@@ -164,8 +188,6 @@ function lifecycleModule(onReady) {
       const mat = new THREE.MeshBasicMaterial({ visible: false });
       groundPlane = new THREE.Mesh(geo, mat);
       scene.add(groundPlane);
-
-      window.addEventListener('resize', handleResize);
     },
     onUpdate: ({ processCpuResult }) => {
       if (processCpuResult && processCpuResult.reality) {
@@ -242,15 +264,6 @@ function createBubbleSprite(text) {
   });
 
   return new THREE.Sprite(material);
-}
-
-function handleResize() {
-  if (!renderer || !camera) return;
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  renderer.setSize(w, h);
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
 }
 
 function roundRect(ctx, x, y, w, h, r) {

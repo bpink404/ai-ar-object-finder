@@ -70,8 +70,23 @@
     </div>
   </div>
 
-  <!-- Three.js (required by 8th Wall's Threejs pipeline module) -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.min.js"></script>
+  <!-- Three.js import map (matches 8th Wall's official examples) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.min.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <!-- Expose THREE as a global — 8th Wall's XR8.Threejs module requires window.THREE -->
+  <script type="module">
+    import * as THREE from 'three';
+    window.THREE = { ...THREE };
+    window.__threeLoaded = true;
+    console.log('[init] Three.js r' + THREE.REVISION + ' loaded');
+  </script>
 
   <!-- 8th Wall XR engine -->
   <script src="xr/xr.js" data-preload-chunks="slam"></script>

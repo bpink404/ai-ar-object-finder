@@ -24,23 +24,48 @@ const LABEL_SCALE = 0.35;
 
 /** Start the 8th Wall camera + SLAM pipeline. Returns a promise that
  *  resolves once the camera is streaming. */
-function start() {
+async function start() {
+  if (typeof XR8 === 'undefined') {
+    throw new Error('8th Wall XR engine not loaded. Make sure xr/xr.js exists.');
+  }
+
+  // Three.js is loaded via an ES module in index.html. Wait for it if needed.
+  if (!window.THREE) {
+    await waitForThree(5000);
+  }
+  if (!window.THREE) {
+    throw new Error('Three.js failed to load. Check network/console for errors.');
+  }
+
   return new Promise((resolve, reject) => {
-    if (typeof XR8 === 'undefined') {
-      reject(new Error('8th Wall XR engine not loaded. Make sure xr/xr.js exists.'));
-      return;
+    try {
+      const canvas = document.getElementById('camerafeed');
+
+      XR8.addCameraPipelineModule(XR8.GlTextureRenderer.pipelineModule());
+      XR8.addCameraPipelineModule(XR8.XrController.pipelineModule());
+      XR8.addCameraPipelineModule(XR8.Threejs.pipelineModule());
+      XR8.addCameraPipelineModule(XR8.CanvasScreenshot.pipelineModule());
+      XR8.addCameraPipelineModule(lifecycleModule(resolve));
+
+      XR8.XrController.configure({ disableWorldTracking: false });
+
+      XR8.run({ canvas });
+    } catch (err) {
+      reject(err);
     }
+  });
+}
 
-    const canvas = document.getElementById('camerafeed');
-
-    XR8.addCameraPipelineModule(XR8.XrController.pipelineModule());
-    XR8.addCameraPipelineModule(XR8.Threejs.pipelineModule());
-    XR8.addCameraPipelineModule(XR8.CanvasScreenshot.pipelineModule());
-    XR8.addCameraPipelineModule(lifecycleModule(resolve));
-
-    XR8.XrController.configure({ disableWorldTracking: false });
-
-    XR8.run({ canvas });
+function waitForThree(timeoutMs) {
+  return new Promise((resolve) => {
+    if (window.THREE) { resolve(); return; }
+    const start = Date.now();
+    const check = setInterval(() => {
+      if (window.THREE || Date.now() - start > timeoutMs) {
+        clearInterval(check);
+        resolve();
+      }
+    }, 50);
   });
 }
 

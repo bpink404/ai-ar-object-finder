@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>AI + AR Object Finder</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- ===== Landing / Idle Screen ===== -->
+  <div id="screen-idle" class="screen active">
+    <div class="landing-card">
+      <h1>AI + AR Object Finder</h1>
+      <p class="subtitle">Point your camera at any object, name it, and pin an AR label in space.</p>
+
+      <label for="api-key-input">Gemini API Key</label>
+      <input
+        id="api-key-input"
+        type="password"
+        placeholder="Paste your key from aistudio.google.com"
+        autocomplete="off"
+      >
+      <a class="help-link" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">
+        Get a free API key
+      </a>
+
+      <label for="model-select">Detection Model</label>
+      <select id="model-select">
+        <option value="flash-lite" selected>Gemini 3.1 Flash-Lite (fastest)</option>
+        <option value="flash">Gemini 3 Flash (most accurate)</option>
+      </select>
+
+      <button id="btn-start" class="btn-primary" disabled>Start AR Camera</button>
+      <p class="note">Prototype only &mdash; API key stays in your browser session and is never stored on any server.</p>
+    </div>
+  </div>
+
+  <!-- ===== AR Camera Screen ===== -->
+  <div id="screen-ar" class="screen">
+    <!-- 8th Wall renders into this canvas -->
+    <canvas id="camerafeed"></canvas>
+
+    <!-- Overlay UI on top of camera -->
+    <div id="ar-overlay">
+      <!-- Status bar -->
+      <div id="status-bar">
+        <span id="status-text">Initializing camera&hellip;</span>
+        <span id="model-badge"></span>
+      </div>
+
+      <!-- Search controls -->
+      <div id="search-controls">
+        <input
+          id="object-input"
+          type="text"
+          placeholder='e.g. "printer", "coffee mug"'
+          autocomplete="off"
+          enterkeyhint="search"
+        >
+        <button id="btn-find" class="btn-action" disabled>Find</button>
+      </div>
+
+      <!-- Action buttons -->
+      <div id="action-bar">
+        <button id="btn-delete" class="btn-secondary" hidden>Delete Label</button>
+        <button id="btn-close" class="btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8th Wall XR engine (user must download xr-standalone.zip into xr/) -->
+  <script src="xr/xr.js" data-preload-chunks="slam"></script>
+
+  <!-- App entry point -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -144,14 +144,10 @@ function fullWindowCanvasModule(canvas) {
   const resize = () => {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
+    canvas.width = w;
+    canvas.height = h;
     canvas.style.width = w + 'px';
     canvas.style.height = h + 'px';
-    canvas.style.position = 'absolute';
-    canvas.style.top = '0';
-    canvas.style.left = '0';
   };
 
   return {

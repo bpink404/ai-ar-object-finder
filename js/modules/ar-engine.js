@@ -17,8 +17,8 @@ let raycaster;
 let activeLabel = null;
 let trackingStatus = 'LIMITED';
 
-const FALLBACK_DEPTH = 1.5; // meters along ray when no surface hit
-const LABEL_HEIGHT = 0.012; // screen-space height (sizeAttenuation off)
+const FALLBACK_DEPTH = 1.2; // meters along ray when no hit test result
+const LABEL_HEIGHT = 0.07; // screen-space height (sizeAttenuation off)
 
 // ---- Public API -------------------------------------------------------
 
@@ -85,30 +85,37 @@ async function captureFrame() {
 }
 
 /** Place a floating label in 3D space at the center of a bounding box.
+ *  Uses 8th Wall's SLAM hit test to find the real-world surface depth,
+ *  falling back to a fixed depth along the camera ray.
  *  @param {number[]} box - [ymin, xmin, ymax, xmax] normalized 0-1000
  *  @param {string}   text - the label to display
  *  @returns {{ precise: boolean }} whether the anchor hit a real surface */
 function placeLabel(box, text) {
   removeLabel();
 
+  // Bounding-box center in 0-1 screen coordinates
   const cx = (box[1] + box[3]) / 2000;
   const cy = (box[0] + box[2]) / 2000;
-
-  const ndc = { x: cx * 2 - 1, y: -(cy * 2 - 1) };
-  raycaster.setFromCamera(ndc, camera);
 
   let position;
   let precise = false;
 
-  // Try the ground plane, but only use it if the hit is within a reasonable
-  // distance — otherwise the label ends up on the floor out of view.
-  const hits = raycaster.intersectObject(groundPlane);
-  if (hits.length > 0 && hits[0].distance < 4) {
-    position = hits[0].point.clone();
-    position.y += 0.15;
-    precise = true;
-  } else {
-    // Place along the ray at a fixed depth in front of the camera
+  // 8th Wall hit test against SLAM feature points / surfaces
+  try {
+    const hitResults = XR8.XrController.hitTest(cx, cy, ['FEATURE_POINT']);
+    if (hitResults && hitResults.length > 0) {
+      const hit = hitResults[0];
+      position = new THREE.Vector3(hit.position.x, hit.position.y, hit.position.z);
+      precise = true;
+    }
+  } catch (e) {
+    console.warn('hitTest unavailable, using fallback:', e);
+  }
+
+  // Fallback: place at fixed depth along camera ray toward the detection center
+  if (!position) {
+    const ndc = { x: cx * 2 - 1, y: -(cy * 2 - 1) };
+    raycaster.setFromCamera(ndc, camera);
     position = new THREE.Vector3();
     raycaster.ray.at(FALLBACK_DEPTH, position);
   }
@@ -116,7 +123,6 @@ function placeLabel(box, text) {
   activeLabel = createBubbleSprite(text);
   activeLabel.position.copy(position);
 
-  // sizeAttenuation is off, so scale is in screen-relative units
   const aspect = 512 / 192;
   activeLabel.scale.set(LABEL_HEIGHT * aspect, LABEL_HEIGHT, 1);
   activeLabel.renderOrder = 999;
@@ -288,9 +294,9 @@ function lifecycleModule(onReady) {
   };
 }
 
-/** Draw a high-visibility neon label on an offscreen canvas and return a
- *  THREE.Sprite. Uses sizeAttenuation: false so it stays readable at any
- *  distance. */
+/** Draw a high-visibility label: bright neon-green fill, bold dark text,
+ *  pin pointer at bottom. sizeAttenuation: false keeps it readable at
+ *  any distance. */
 function createBubbleSprite(text) {
   const canvas = document.createElement('canvas');
   const dpr = 2;
@@ -309,48 +315,40 @@ function createBubbleSprite(text) {
   const bh = h - pad * 2;
 
   // Outer glow
-  ctx.shadowColor = '#00ff88';
-  ctx.shadowBlur = 24;
+  ctx.shadowColor = '#00ff44';
+  ctx.shadowBlur = 28;
 
-  // Background
-  ctx.fillStyle = 'rgba(0, 20, 10, 0.88)';
+  // Bright green fill
+  ctx.fillStyle = '#00ee44';
   roundRect(ctx, bx, by, bw, bh, radius);
   ctx.fill();
 
   ctx.shadowBlur = 0;
 
-  // Bright border
-  ctx.strokeStyle = '#00ff88';
+  // Darker green border for definition
+  ctx.strokeStyle = '#009922';
   ctx.lineWidth = 3;
   roundRect(ctx, bx, by, bw, bh, radius);
   ctx.stroke();
 
-  // Inner accent line
-  ctx.strokeStyle = 'rgba(0, 255, 136, 0.3)';
-  ctx.lineWidth = 1;
-  roundRect(ctx, bx + 4, by + 4, bw - 8, bh - 8, radius - 3);
-  ctx.stroke();
-
-  // Pin icon (small triangle at bottom center)
-  const triSize = 12;
-  ctx.fillStyle = '#00ff88';
+  // Pin pointer at bottom center
+  const triSize = 14;
+  ctx.fillStyle = '#00ee44';
+  ctx.shadowColor = '#00ff44';
+  ctx.shadowBlur = 12;
   ctx.beginPath();
-  ctx.moveTo(w / 2 - triSize, by + bh);
-  ctx.lineTo(w / 2 + triSize, by + bh);
-  ctx.lineTo(w / 2, by + bh + triSize);
+  ctx.moveTo(w / 2 - triSize, by + bh - 1);
+  ctx.lineTo(w / 2 + triSize, by + bh - 1);
+  ctx.lineTo(w / 2, by + bh + triSize + 2);
   ctx.closePath();
   ctx.fill();
+  ctx.shadowBlur = 0;
 
-  // Label text
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 42px -apple-system, BlinkMacSystemFont, sans-serif';
+  // Bold dark text on the bright green
+  ctx.fillStyle = '#003300';
+  ctx.font = 'bold 48px -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-
-  // Text shadow for readability
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-  ctx.shadowBlur = 4;
-  ctx.shadowOffsetY = 2;
 
   const maxWidth = bw - 32;
   let displayText = text;
@@ -361,9 +359,6 @@ function createBubbleSprite(text) {
     displayText += '…';
   }
   ctx.fillText(displayText, w / 2, h / 2 - 2);
-
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 0;
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;

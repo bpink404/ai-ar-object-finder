@@ -17,8 +17,8 @@ let raycaster;
 let activeLabel = null;
 let trackingStatus = 'LIMITED';
 
-const FALLBACK_DEPTH = 2.0; // meters along ray when no surface hit
-const LABEL_SCALE = 0.35;
+const FALLBACK_DEPTH = 1.5; // meters along ray when no surface hit
+const LABEL_HEIGHT = 0.012; // screen-space height (sizeAttenuation off)
 
 // ---- Public API -------------------------------------------------------
 
@@ -100,20 +100,26 @@ function placeLabel(box, text) {
   let position;
   let precise = false;
 
+  // Try the ground plane, but only use it if the hit is within a reasonable
+  // distance — otherwise the label ends up on the floor out of view.
   const hits = raycaster.intersectObject(groundPlane);
-  if (hits.length > 0) {
+  if (hits.length > 0 && hits[0].distance < 4) {
     position = hits[0].point.clone();
-    // Lift the label slightly above the surface
-    position.y += 0.12;
+    position.y += 0.15;
     precise = true;
   } else {
+    // Place along the ray at a fixed depth in front of the camera
     position = new THREE.Vector3();
     raycaster.ray.at(FALLBACK_DEPTH, position);
   }
 
   activeLabel = createBubbleSprite(text);
   activeLabel.position.copy(position);
-  activeLabel.scale.set(LABEL_SCALE, LABEL_SCALE * 0.5, 1);
+
+  // sizeAttenuation is off, so scale is in screen-relative units
+  const aspect = 512 / 192;
+  activeLabel.scale.set(LABEL_HEIGHT * aspect, LABEL_HEIGHT, 1);
+  activeLabel.renderOrder = 999;
   scene.add(activeLabel);
 
   return { precise };
@@ -282,8 +288,9 @@ function lifecycleModule(onReady) {
   };
 }
 
-/** Draw a rounded-rect text bubble on an offscreen canvas and return a
- *  THREE.Sprite using it as a texture. */
+/** Draw a high-visibility neon label on an offscreen canvas and return a
+ *  THREE.Sprite. Uses sizeAttenuation: false so it stays readable at any
+ *  distance. */
 function createBubbleSprite(text) {
   const canvas = document.createElement('canvas');
   const dpr = 2;
@@ -294,27 +301,58 @@ function createBubbleSprite(text) {
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  const pad = 20;
-  const radius = 16;
+  const pad = 16;
+  const radius = 20;
+  const bx = pad;
+  const by = pad;
+  const bw = w - pad * 2;
+  const bh = h - pad * 2;
+
+  // Outer glow
+  ctx.shadowColor = '#00ff88';
+  ctx.shadowBlur = 24;
 
   // Background
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-  roundRect(ctx, pad, pad, w - pad * 2, h - pad * 2, radius);
+  ctx.fillStyle = 'rgba(0, 20, 10, 0.88)';
+  roundRect(ctx, bx, by, bw, bh, radius);
   ctx.fill();
 
-  // Border
-  ctx.strokeStyle = 'rgba(79, 110, 247, 0.8)';
-  ctx.lineWidth = 2;
-  roundRect(ctx, pad, pad, w - pad * 2, h - pad * 2, radius);
+  ctx.shadowBlur = 0;
+
+  // Bright border
+  ctx.strokeStyle = '#00ff88';
+  ctx.lineWidth = 3;
+  roundRect(ctx, bx, by, bw, bh, radius);
   ctx.stroke();
 
-  // Text
+  // Inner accent line
+  ctx.strokeStyle = 'rgba(0, 255, 136, 0.3)';
+  ctx.lineWidth = 1;
+  roundRect(ctx, bx + 4, by + 4, bw - 8, bh - 8, radius - 3);
+  ctx.stroke();
+
+  // Pin icon (small triangle at bottom center)
+  const triSize = 12;
+  ctx.fillStyle = '#00ff88';
+  ctx.beginPath();
+  ctx.moveTo(w / 2 - triSize, by + bh);
+  ctx.lineTo(w / 2 + triSize, by + bh);
+  ctx.lineTo(w / 2, by + bh + triSize);
+  ctx.closePath();
+  ctx.fill();
+
+  // Label text
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 36px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.font = 'bold 42px -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  const maxWidth = w - pad * 4;
+  // Text shadow for readability
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetY = 2;
+
+  const maxWidth = bw - 32;
   let displayText = text;
   if (ctx.measureText(text).width > maxWidth) {
     while (ctx.measureText(displayText + '…').width > maxWidth && displayText.length > 1) {
@@ -322,7 +360,10 @@ function createBubbleSprite(text) {
     }
     displayText += '…';
   }
-  ctx.fillText(displayText, w / 2, h / 2);
+  ctx.fillText(displayText, w / 2, h / 2 - 2);
+
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;
@@ -331,6 +372,7 @@ function createBubbleSprite(text) {
     map: texture,
     transparent: true,
     depthTest: false,
+    sizeAttenuation: false,
   });
 
   return new THREE.Sprite(material);

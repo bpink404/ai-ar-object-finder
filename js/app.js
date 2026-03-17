@@ -4,20 +4,23 @@
  * States
  * ------
  *   idle            Landing screen visible
- *   camera-starting 8th Wall initializing
+ *   camera-starting AR engine initializing
  *   ready           Camera running, user can type + tap Find
  *   searching       Gemini detection in progress
  *   found           Label anchored in AR scene
  *
- * Transitions are driven by user actions (Start, Find, Delete, Close)
- * and async results (camera ready, detection response).
+ * Supports two AR backends (selectable on landing screen):
+ *   - 8th Wall (works on all mobile browsers including Safari iOS)
+ *   - WebXR   (Chrome/Samsung/Edge on Android via ARCore)
  */
 
-import * as arEngine from './modules/ar-engine.js';
+import * as engine8w from './modules/ar-engine.js';
+import * as engineXR from './modules/ar-engine-webxr.js';
 import * as detection from './modules/detection.js';
 import * as ui from './modules/ui.js';
 
 let state = 'idle';
+let arEngine = null;
 
 function setState(next) {
   state = next;
@@ -26,13 +29,15 @@ function setState(next) {
 
 // ---- Callbacks from UI ------------------------------------------------
 
-async function handleStart(apiKey, modelKey) {
+async function handleStart(apiKey, modelKey, engineKey) {
   detection.init(apiKey, modelKey);
+
+  arEngine = engineKey === 'webxr' ? engineXR : engine8w;
 
   ui.showAR();
   setState('camera-starting');
   ui.setModelBadge(detection.getModelLabel());
-  ui.setStatus('Starting camera…');
+  ui.setStatus(`Starting camera (${engineKey === 'webxr' ? 'WebXR' : '8th Wall'})…`);
   ui.setFindEnabled(false);
   ui.setDeleteVisible(false);
 
@@ -56,7 +61,6 @@ async function handleFind(objectName) {
   ui.setDeleteVisible(false);
   ui.setStatus(`Searching for "${objectName}"…`, 'searching');
 
-  // Remove any existing label before a new search
   arEngine.removeLabel();
 
   try {
@@ -94,7 +98,8 @@ function handleDelete() {
 }
 
 function handleClose() {
-  arEngine.stop();
+  if (arEngine) arEngine.stop();
+  arEngine = null;
   setState('idle');
   ui.showIdle();
 }

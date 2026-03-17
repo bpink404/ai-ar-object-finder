@@ -94,6 +94,18 @@ html, body {
   margin-top: -6px;
 }
 
+#engine-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.engine-note {
+  font-size: 11px;
+  color: #48c774;
+  margin-top: -4px;
+}
+
 .note {
   font-size: 11px;
   color: #666;

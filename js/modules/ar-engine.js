@@ -11,14 +11,15 @@
  * making it swappable for a different AR backend later.
  */
 
+import { createBubbleSprite, applyLabelScale } from './label.js';
+
 let scene, camera, renderer;
 let groundPlane;
 let raycaster;
 let activeLabel = null;
 let trackingStatus = 'LIMITED';
 
-const FALLBACK_DEPTH = 1.2; // meters along ray when no hit test result
-const LABEL_HEIGHT = 0.07; // screen-space height (sizeAttenuation off)
+const FALLBACK_DEPTH = 1.2;
 
 // ---- Public API -------------------------------------------------------
 
@@ -122,10 +123,7 @@ function placeLabel(box, text) {
 
   activeLabel = createBubbleSprite(text);
   activeLabel.position.copy(position);
-
-  const aspect = 512 / 192;
-  activeLabel.scale.set(LABEL_HEIGHT * aspect, LABEL_HEIGHT, 1);
-  activeLabel.renderOrder = 999;
+  applyLabelScale(activeLabel);
   scene.add(activeLabel);
 
   return { precise };
@@ -294,95 +292,3 @@ function lifecycleModule(onReady) {
   };
 }
 
-/** Draw a high-visibility label: bright neon-green fill, bold dark text,
- *  pin pointer at bottom. sizeAttenuation: false keeps it readable at
- *  any distance. */
-function createBubbleSprite(text) {
-  const canvas = document.createElement('canvas');
-  const dpr = 2;
-  const w = 512;
-  const h = 192;
-  canvas.width = w * dpr;
-  canvas.height = h * dpr;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-
-  const pad = 16;
-  const radius = 20;
-  const bx = pad;
-  const by = pad;
-  const bw = w - pad * 2;
-  const bh = h - pad * 2;
-
-  // Outer glow
-  ctx.shadowColor = '#00ff44';
-  ctx.shadowBlur = 28;
-
-  // Bright green fill
-  ctx.fillStyle = '#00ee44';
-  roundRect(ctx, bx, by, bw, bh, radius);
-  ctx.fill();
-
-  ctx.shadowBlur = 0;
-
-  // Darker green border for definition
-  ctx.strokeStyle = '#009922';
-  ctx.lineWidth = 3;
-  roundRect(ctx, bx, by, bw, bh, radius);
-  ctx.stroke();
-
-  // Pin pointer at bottom center
-  const triSize = 14;
-  ctx.fillStyle = '#00ee44';
-  ctx.shadowColor = '#00ff44';
-  ctx.shadowBlur = 12;
-  ctx.beginPath();
-  ctx.moveTo(w / 2 - triSize, by + bh - 1);
-  ctx.lineTo(w / 2 + triSize, by + bh - 1);
-  ctx.lineTo(w / 2, by + bh + triSize + 2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.shadowBlur = 0;
-
-  // Bold dark text on the bright green
-  ctx.fillStyle = '#003300';
-  ctx.font = 'bold 48px -apple-system, BlinkMacSystemFont, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  const maxWidth = bw - 32;
-  let displayText = text;
-  if (ctx.measureText(text).width > maxWidth) {
-    while (ctx.measureText(displayText + '…').width > maxWidth && displayText.length > 1) {
-      displayText = displayText.slice(0, -1);
-    }
-    displayText += '…';
-  }
-  ctx.fillText(displayText, w / 2, h / 2 - 2);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.needsUpdate = true;
-
-  const material = new THREE.SpriteMaterial({
-    map: texture,
-    transparent: true,
-    depthTest: false,
-    sizeAttenuation: false,
-  });
-
-  return new THREE.Sprite(material);
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}

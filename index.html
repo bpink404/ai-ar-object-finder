@@ -32,14 +32,25 @@
         <option value="flash">Gemini 3 Flash (most accurate)</option>
       </select>
 
+      <div id="engine-group" hidden>
+        <label for="engine-select">AR Engine</label>
+        <select id="engine-select">
+          <option value="8thwall" selected>8th Wall (SLAM)</option>
+          <option value="webxr">WebXR (ARCore)</option>
+        </select>
+        <p class="engine-note">WebXR AR is available on this device</p>
+      </div>
+
       <button id="btn-start" class="btn-primary" disabled>Start AR Camera</button>
       <p class="note">Prototype only &mdash; API key stays in your browser session and is never stored on any server.</p>
     </div>
   </div>
 
+  <!-- Hidden video for WebXR frame capture (getUserMedia) -->
+  <video id="webxr-video" hidden playsinline autoplay muted></video>
+
   <!-- ===== AR Camera Screen ===== -->
   <div id="screen-ar" class="screen">
-    <!-- 8th Wall renders into this canvas -->
     <canvas id="camerafeed"></canvas>
 
     <!-- Overlay UI on top of camera -->

@@ -16,6 +16,8 @@ const els = {
   screenAR: $('#screen-ar'),
   apiKeyInput: $('#api-key-input'),
   modelSelect: $('#model-select'),
+  engineGroup: $('#engine-group'),
+  engineSelect: $('#engine-select'),
   btnStart: $('#btn-start'),
   statusBar: $('#status-bar'),
   statusText: $('#status-text'),
@@ -25,6 +27,8 @@ const els = {
   btnDelete: $('#btn-delete'),
   btnClose: $('#btn-close'),
 };
+
+let webxrSupported = false;
 
 // ---- Callbacks (set by app.js) ----------------------------------------
 
@@ -36,15 +40,34 @@ function bindCallbacks(cbs) {
   callbacks = cbs;
 }
 
+// ---- WebXR feature detection ------------------------------------------
+
+async function detectWebXR() {
+  if (!navigator.xr) return;
+  try {
+    webxrSupported = await navigator.xr.isSessionSupported('immersive-ar');
+  } catch (_) {
+    webxrSupported = false;
+  }
+  if (webxrSupported) {
+    els.engineGroup.hidden = false;
+  }
+}
+
+function getSelectedEngine() {
+  if (!webxrSupported) return '8thwall';
+  return els.engineSelect.value;
+}
+
 // ---- Event wiring -----------------------------------------------------
 
 function wireEvents() {
-  // Enable Start button when API key is entered
+  detectWebXR();
+
   els.apiKeyInput.addEventListener('input', () => {
     els.btnStart.disabled = !els.apiKeyInput.value.trim();
   });
 
-  // Restore key from sessionStorage if available
   const savedKey = sessionStorage.getItem('gemini_api_key');
   if (savedKey) {
     els.apiKeyInput.value = savedKey;
@@ -56,12 +79,18 @@ function wireEvents() {
     els.modelSelect.value = savedModel;
   }
 
+  const savedEngine = sessionStorage.getItem('ar_engine');
+  if (savedEngine && els.engineSelect.querySelector(`option[value="${savedEngine}"]`)) {
+    els.engineSelect.value = savedEngine;
+  }
+
   els.btnStart.addEventListener('click', () => {
     const key = els.apiKeyInput.value.trim();
     if (!key) return;
     sessionStorage.setItem('gemini_api_key', key);
     sessionStorage.setItem('gemini_model', els.modelSelect.value);
-    callbacks.onStart?.(key, els.modelSelect.value);
+    sessionStorage.setItem('ar_engine', els.engineSelect.value);
+    callbacks.onStart?.(key, els.modelSelect.value, getSelectedEngine());
   });
 
   els.btnFind.addEventListener('click', () => {
@@ -140,4 +169,5 @@ export {
   setDeleteVisible,
   focusObjectInput,
   getObjectInputValue,
+  getSelectedEngine,
 };
